@@ -1,0 +1,33 @@
+
+
+```
+# Zig build artifacts
+zig-out/
+zig-cache/
+.zig-cache/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.lib
+*.exe
+
+# Debug files
+*.pdb
+*.dSYM/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ZLS (Zig Language Server) cache
+.zls/
+```
