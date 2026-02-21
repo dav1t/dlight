@@ -3,11 +3,10 @@ const Io = std.Io;
 
 const dlight = @import("dlight");
 
-const MetaCommandResult = enum { meta_command_success, meta_command_unrecognized_command };
-const PrepareResult = enum { perpare_success, pepare_unrecognized_statement };
+const MetaCommandError = error{UnrecognizedCommand};
+const PrepareError = error{UnrecognizedStatement};
 
-const StatementType = enum { statement_insert, statement_select };
-
+const StatementType = enum { insert, select };
 const Statement = struct { type: StatementType };
 
 fn printPrompt(writer: *Io.Writer) Io.Writer.Error!void {
@@ -16,34 +15,34 @@ fn printPrompt(writer: *Io.Writer) Io.Writer.Error!void {
 
 fn executeStatement(writer: *Io.Writer, statement: *Statement) !void {
     switch (statement.type) {
-        .statement_insert => {
-            try writer.print("This is where we would do an insert. \n", .{});
+        .insert => {
+            try writer.print("This is where we would do an insert.\n", .{});
         },
-        .statement_select => {
-            try writer.print("This is where would do a select \n", .{});
+        .select => {
+            try writer.print("This is where we would do a select.\n", .{});
         },
     }
 }
 
-fn prepareStatement(input: *const []u8, statement: *Statement) PrepareResult {
-    if (std.mem.eql(u8, input.*, "insert")) {
-        statement.type = StatementType.statement_insert;
-        return PrepareResult.perpare_success;
+fn prepareStatement(input: []const u8, statement: *Statement) PrepareError!void {
+    if (std.mem.eql(u8, input, "insert")) {
+        statement.type = StatementType.insert;
+        return;
     }
 
-    if (std.mem.eql(u8, input.*, "select")) {
-        statement.type = StatementType.statement_select;
-        return PrepareResult.perpare_success;
+    if (std.mem.eql(u8, input, "select")) {
+        statement.type = StatementType.select;
+        return;
     }
 
-    return PrepareResult.pepare_unrecognized_statement;
+    return PrepareError.UnrecognizedStatement;
 }
 
-fn doMetaCommand(input: *const []u8) MetaCommandResult {
-    if (std.mem.eql(u8, input.*, ".exit")) {
+fn doMetaCommand(input: []const u8) MetaCommandError!void {
+    if (std.mem.eql(u8, input, ".exit")) {
         std.process.exit(0);
     } else {
-        return MetaCommandResult.meta_command_unrecognized_command;
+        return MetaCommandError.UnrecognizedCommand;
     }
 }
 
@@ -66,29 +65,28 @@ pub fn main(init: std.process.Init) !void {
 
         // If command is meta command
         if (line[0] == '.') {
-            switch (doMetaCommand(&line)) {
-                MetaCommandResult.meta_command_success => continue,
-                MetaCommandResult.meta_command_unrecognized_command => {
-                    try stdout.print("Unrecognized command '{s}' \n", .{line});
+            doMetaCommand(line) catch |err| switch (err) {
+                MetaCommandError.UnrecognizedCommand => {
+                    try stdout.print("Unrecognized command '{s}'\n", .{line});
                     try stdout.flush();
                     continue;
                 },
-            }
+            };
+            continue;
         }
 
-        var statement: Statement = Statement{ .type = .statement_insert };
+        var statement: Statement = .{ .type = .insert };
 
-        switch (prepareStatement(&line, &statement)) {
-            .pepare_unrecognized_statement => {
-                try stdout.print("Unrecognized keyword at start of '{s}' \n", .{line});
+        prepareStatement(line, &statement) catch |err| switch (err) {
+            PrepareError.UnrecognizedStatement => {
+                try stdout.print("Unrecognized keyword at start of '{s}'\n", .{line});
                 try stdout.flush();
                 continue;
             },
-            .perpare_success => {},
-        }
+        };
 
         try executeStatement(stdout, &statement);
-        try stdout.print("Executed. \n", .{});
+        try stdout.print("Executed.\n", .{});
         try stdout.flush();
     }
 }
