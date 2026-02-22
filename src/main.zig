@@ -7,7 +7,7 @@ const COLUMN_USERNAME_SIZE = 32;
 const COLUMN_EMAIL_SIZE = 255;
 
 const MetaCommandError = error{UnrecognizedCommand};
-const PrepareError = error{UnrecognizedStatement};
+const PrepareError = error{ UnrecognizedStatement, SyntaxError };
 const SyntaxError = error{CantParseArgument};
 const ExecuteError = error{ ExecuteTableFull, SerializationError };
 
@@ -24,9 +24,9 @@ const ID_SIZE = @sizeOf(@FieldType(Row, "id"));
 const USERNAME_SIZE = @sizeOf(@FieldType(Row, "username"));
 const EMAIL_SIZE = @sizeOf(@FieldType(Row, "email"));
 
-const ID_OFFSET = @offsetOf(Row, "id");
-const USERNAME_OFFSET = @offsetOf(Row, "username");
-const EMAIL_OFFSET = @offsetOf(Row, "email");
+const ID_OFFSET = 0;
+const USERNAME_OFFSET = ID_SIZE;
+const EMAIL_OFFSET = ID_SIZE + USERNAME_SIZE;
 
 const ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
@@ -84,7 +84,7 @@ fn printPrompt(writer: *Io.Writer) Io.Writer.Error!void {
 }
 
 fn print_row(row: *Row) void {
-    std.debug.print("({d}, {s}, {s})\n", .{ row.id, row.email, row.username });
+    std.debug.print("({d}, {s}, {s})\n", .{ row.id, row.username, row.email });
 }
 
 fn executeInsert(statement: *Statement, table: *Table) ExecuteError!void {
@@ -136,8 +136,8 @@ fn executeStatement(writer: *Io.Writer, statement: *Statement, table: *Table) !v
 fn prepareStatement(input: []const u8, statement: *Statement) PrepareError!void {
     if (std.mem.startsWith(u8, input, "insert")) {
         statement.type = StatementType.insert;
-        statement.row_to_insert = parseArguments(input) catch |err| switch (err) {
-            SyntaxError.CantParseArgument => null,
+        statement.row_to_insert = parseArguments(input) catch {
+            return PrepareError.SyntaxError;
         };
         return;
     }
@@ -197,10 +197,6 @@ pub fn main(init: std.process.Init) !void {
     var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_file_writer.interface;
 
-    const manualSize = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
-    try stdout.print("builtin Row size is {} \n manually calculated size is {} \n", .{ ROW_SIZE, manualSize });
-    try stdout.flush();
-
     while (true) {
         try printPrompt(stdout);
         try stdout.flush();
@@ -226,6 +222,11 @@ pub fn main(init: std.process.Init) !void {
         prepareStatement(line, &statement) catch |err| switch (err) {
             PrepareError.UnrecognizedStatement => {
                 try stdout.print("Unrecognized keyword at start of '{s}'\n", .{line});
+                try stdout.flush();
+                continue;
+            },
+            PrepareError.SyntaxError => {
+                try stdout.print("Syntax error. Usage: insert <id> <username> <email>\n", .{});
                 try stdout.flush();
                 continue;
             },
